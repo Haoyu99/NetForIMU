@@ -42,4 +42,7 @@ def get_CNN_model(arch):
                            base_plane=64, output_block=FCOutputModule, **_fc_config)
     else:
         raise ValueError('Invalid architecture: ')
+    pytorch_total_params = sum(p.numel() for p in network.parameters() if p.requires_grad)
+    print('Network constructed. trainable parameters: {}'.format(pytorch_total_params))
+    print(network)
     return network

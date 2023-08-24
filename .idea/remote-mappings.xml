@@ -6,7 +6,7 @@
         <remote-mappings server-id="python@sftp://jiamingjie@10.112.155.146:22/home/jiamingjie/anaconda3/envs/torch_zhy/bin/python">
           <settings>
             <list>
-              <mapping local-root="$PROJECT_DIR$" remote-root="/home/jiamingjie/zhanghaoyu" />
+              <mapping local-root="$PROJECT_DIR$" remote-root="/home/jiamingjie/zhanghaoyu/NetForIMU" />
             </list>
           </settings>
         </remote-mappings>

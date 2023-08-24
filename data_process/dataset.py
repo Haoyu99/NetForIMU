@@ -1,10 +1,14 @@
 from os import path as osp
-from data_utils import load_cached_sequences
 import numpy as np
 import random
 from torch.utils.data import Dataset
+
+from data_process.data_utils import load_cached_sequences
+
+
 class RIDIDataset(Dataset):
     """
+    CNN 网络模型
     输入200组数据 对应一个输出
     """
     def __init__(self, seq_type, root_dir, data_list, cache_path=None, step_size=10, window_size=200,

@@ -1,11 +1,11 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <project version="4">
-  <component name="PublishConfigData" remoteFilesAllowedToDisappearOnAutoupload="false">
+  <component name="PublishConfigData" remoteFilesAllowedToDisappearOnAutoupload="false" autoUploadExternalChanges="true">
     <serverData>
       <paths name="jiamingjie@10.112.155.146:22">
         <serverdata>
           <mappings>
-            <mapping deploy="/home/jiamingjie/zhanghaoyu" local="$PROJECT_DIR$" web="/" />
+            <mapping deploy="/home/jiamingjie/zhanghaoyu/NetForIMU" local="$PROJECT_DIR$" web="/" />
           </mappings>
         </serverdata>
       </paths>

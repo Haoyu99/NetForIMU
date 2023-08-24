@@ -1,6 +1,5 @@
 import json
 import os
-import sys
 import time
 from os import path as osp
 from pathlib import Path
@@ -9,12 +8,13 @@ from shutil import copyfile
 import numpy as np
 import torch
 from scipy.interpolate import interp1d
+from tensorboardX import SummaryWriter
 from torch.optim.lr_scheduler import ReduceLROnPlateau
 from torch.utils.data import DataLoader
-from tensorboardX import SummaryWriter
-from data_process.data_sequence import RIDIRawDataSequence
 
-from get_dataset import  get_dataset
+from data_process.data_sequence import RIDIRawDataSequence, RIDIGlobalDataSequence
+
+from get_dataset import get_dataset
 
 # 定义训练中需要用到的参数
 from get_model import get_CNN_model
@@ -32,19 +32,27 @@ class GetArgs(dict):
 
 
 info = {'type': 'lstm_bi',
-        # 'data_dir': 'D:\DataSet\RIDI\\archive\data_publish_v2',
+        # 数据源
         'data_dir': '/home/jiamingjie/zhanghaoyu/data',
+        # 训练数据list
         'train_list': '/home/jiamingjie/zhanghaoyu/data/train_handle.txt',
+        # 验证数据list
         'val_list': '/home/jiamingjie/zhanghaoyu/data/val_handle.txt',
+        # 测试数据list
         'test_list': '/home/jiamingjie/zhanghaoyu/data/test_list2.txt',
+        # 数据生成的缓存地址 第一次加载从csv-> hd5 之后加载缓存
         'cache_path': '/home/jiamingjie/zhanghaoyu/data//cache',
+        # 测试时加载的模型地址
         'model_path': '/home/jiamingjie/zhanghaoyu/datacache/handle_out/checkpoints/checkpoint_best.pt',
         'feature_sigma': 0.001,
         'target_sigma': 0.0,
+        # 200个数据算一个切片 6*200 输入
         'window_size': 200,
+        # 打乱顺序的范围
         'step_size': 10,
         'batch_size': 64,
         'num_workers': 1,
+        # 输出地址
         'out_dir': '/home/jiamingjie/zhanghaoyu/datacache/handle_out/',
         'device': 'cuda:1',
         'dataset': 'ridi',
@@ -54,13 +62,13 @@ info = {'type': 'lstm_bi',
         'save_interval': 20,
         'lr': 0.01,
         'mode': 'train',
-        # 'continue_from': 'D:\DataSet\RIDI\\archive\data_publish_v2\cache\lstm_out\checkpoints\\icheckpoint_7979.pt',
         'continue_from': None,
         'fast_test': False,
         'show_plot': True,
-        'seq_type': RIDIRawDataSequence,
+        'seq_type': RIDIGlobalDataSequence,
         }
 args = GetArgs(info)
+
 
 # 写出配置信息
 def write_config(args, **kwargs):
@@ -71,8 +79,6 @@ def write_config(args, **kwargs):
             if kwargs:
                 values['kwargs'] = kwargs
             json.dump(values, f, sort_keys=True)
-
-
 
 
 def get_loss_function():
@@ -92,13 +98,12 @@ def format_string(*argv, sep=' '):
 
 
 def train(args, **kwargs):
-    # Loading data
+    # 加载训练数据和验证集数据
     start_t = time.time()
     train_dataset = get_dataset(args, mode='train', **kwargs)
     train_loader = DataLoader(train_dataset, batch_size=args.batch_size, num_workers=args.num_workers, shuffle=True,
                               drop_last=True, pin_memory=True)
     end_t = time.time()
-
     print('训练集获取成功. 用时: {:.3f}s'.format(end_t - start_t))
     val_dataset, val_loader = None, None
     if args.val_list is not None:
@@ -121,44 +126,34 @@ def train(args, **kwargs):
         if args.val_list is not None:
             copyfile(args.val_list, osp.join(args.out_dir, "validation_list.txt"))
         write_config(args, **kwargs)
-    print('\nNumber of train samples: {}'.format(len(train_dataset)))
+
+    print('训练集Dataset切片个数: {}'.format(len(train_dataset)))
     train_mini_batches = len(train_loader)
-    print('train_mini_batches : ' + train_mini_batches)
     # 验证集
     if val_dataset:
-        print('Number of val samples: {}'.format(len(val_dataset)))
+        print('验证集Dataset切片个数: {}'.format(len(val_dataset)))
         val_mini_batches = len(val_loader)
-        print('val_mini_batches' + val_mini_batches)
-    # 选择模型
-    network = get_CNN_model(args, **kwargs).to(device)
-    total_params = network.get_num_params()
-    print('Total number of parameters: ', total_params)
 
+    network = get_CNN_model("resnet101").to(device)
+    # criterion = get_loss_function()
+    # loss 计算方式 使用均方根误差
     criterion = torch.nn.MSELoss()
+    # 使用Adam优化器
     optimizer = torch.optim.Adam(network.parameters(), args.lr)
-    scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, factor=0.1, patience=10, verbose=True, eps=1e-12)
+    # lr自动更新
+    scheduler = ReduceLROnPlateau(optimizer, 'min', patience=10, factor=0.1, verbose=True, eps=1e-12)
 
-    quiet_mode = kwargs.get('quiet', False)
-    use_scheduler = kwargs.get('use_scheduler', False)
-
+    # 输出txt 日志
+    log_file = None
+    if args.out_dir:
+        log_file = osp.join(args.out_dir, 'logs', 'log.txt')
+        if osp.exists(log_file):
+            if args.continue_from is None:
+                os.remove(log_file)
+            else:
+                copyfile(log_file, osp.join(args.out_dir, 'logs', 'log_old.txt'))
 
     start_epoch = 0
-    if args.continue_from is not None and osp.exists(args.continue_from):
-        with open(osp.join(str(Path(args.continue_from).parents[1]), 'config.json'), 'r') as f:
-            model_data = json.load(f)
-
-        if device.type == 'cpu':
-            checkpoints = torch.load(args.continue_from, map_location=lambda storage, location: storage)
-        else:
-            checkpoints = torch.load(args.continue_from, 'cuda:0')
-
-        start_epoch = checkpoints.get('epoch', 0)
-        network.load_state_dict(checkpoints.get('model_state_dict'))
-        optimizer.load_state_dict(checkpoints.get('optimizer_state_dict'))
-    # if kwargs.get('force_lr', False):
-    #     for param_group in optimizer.param_groups:
-    #         param_group['lr'] = args.lr
-
     if args.out_dir is not None and osp.exists(osp.join(args.out_dir, 'logs')):
         summary_writer = SummaryWriter(osp.join(args.out_dir, 'logs'))
 
@@ -167,11 +162,9 @@ def train(args, **kwargs):
     train_errs = np.zeros(args.epochs)
 
     print("Starting from epoch {}".format(start_epoch))
-
-    total_epoch = start_epoch
     train_losses_all, val_losses_all = [], []
 
-    # Get the initial loss.  获取初始的损失函数
+    # Get the initial loss.  获取初始的loss
     init_train_targ, init_train_pred = run_test(network, train_loader, device, eval_mode=False)
     init_train_loss = np.mean((init_train_targ - init_train_pred) ** 2, axis=0)
     train_losses_all.append(np.mean(init_train_loss))
@@ -182,16 +175,14 @@ def train(args, **kwargs):
 
     if val_loader is not None:
         init_val_targ, init_val_pred = run_test(network, val_loader, device)
-        # print(np.argwhere(np.isnan(init_val_targ)))
-        # a = init_val_targ - init_val_pred
-        # print(np.argwhere(np.isnan(a)))
-        init_val_loss = np.mean((init_val_targ - init_val_pred) ** 2, axis=0)
+        init_val_loss = np.mean(init_val_targ - init_val_pred ** 2, axis=0)
         val_losses_all.append(np.mean(init_val_loss))
         print('Validation loss: {}/{:.6f}'.format(init_val_loss, val_losses_all[-1]))
         if summary_writer is not None:
             add_summary(summary_writer, init_val_loss, 0, 'val')
 
     try:
+        # 开始正式训练
         for epoch in range(start_epoch, args.epochs):
             log_line = ''
             network.train()
@@ -225,8 +216,6 @@ def train(args, **kwargs):
             train_losses = np.average((train_outs - train_targets) ** 2, axis=0)
             end_t = time.time()
             print('-------------------------')
-            # print('Epoch {}, time usage: {:.3f}s, average loss: {}/{:.6f}'.format(
-            #     epoch, end_t - start_t, train_losses, np.average(train_losses)))
             print('Epoch {}, time usage: {:.3f}s, average loss: {:.6f}, lr : {}'.format(
                 epoch, end_t - start_t, np.average(train_losses), optimizer.param_groups[0]['lr']))
             train_losses_all.append(np.average(train_losses))
@@ -234,15 +223,6 @@ def train(args, **kwargs):
             if summary_writer is not None:
                 add_summary(summary_writer, train_losses, epoch + 1, 'train')
                 summary_writer.add_scalar('optimizer/lr', optimizer.param_groups[0]['lr'], epoch)
-
-            # if not quiet_mode:
-            #     print('-' * 25)
-            #     # print('Epoch {}, time usage: {:.3f}s, loss: {}, vel_loss {}/{:.6f}'.format(
-            #     #     epoch, end_t - start_t, train_errs[epoch], train_vel.get_channel_avg(), train_vel.get_total_avg()))
-            #     print('Epoch {}, time usage: {:.3f}s, loss: {}, learningRate: {}'.format(
-            #         epoch, end_t - start_t, train_errs[epoch], optimizer.state_dict()['param_groups'][0]['lr']))
-            # log_line = format_string(log_line, epoch, optimizer.param_groups[0]['lr'], train_errs[epoch], )
-
             saved_model = False
             # 验证集
             if val_loader is not None:
@@ -253,7 +233,6 @@ def train(args, **kwargs):
                 # print('Validation loss: {}/{:.6f}'.format(val_losses, avg_loss))
                 print('Validation loss: {:.6f}'.format(avg_loss))
                 scheduler.step(avg_loss)
-                # val_vel = MSEAverageMeter(3, [2], _output_channel)
                 if summary_writer is not None:
                     add_summary(summary_writer, val_losses, epoch + 1, 'val')
                 val_losses_all.append(avg_loss)
@@ -266,34 +245,6 @@ def train(args, **kwargs):
                                         'optimizer_state_dict': optimizer.state_dict()}, model_path)
                         print('Model saved to ', model_path)
 
-            total_epoch = epoch
-            #     for bid, batch in enumerate(val_loader):
-            #         feat, targ, _, _ = batch
-            #         feat, targ = feat.to(device), targ.to(device)
-            #         optimizer.zero_grad()
-            #         pred = network(feat)
-            #         # val_vel.add(pred.cpu().detach().numpy(), targ.cpu().detach().numpy())
-            #         val_loss += criterion(pred, targ).cpu().detach().numpy()
-            #     val_loss = val_loss / val_mini_batches
-            #     # log_line = format_string(log_line, val_loss, *val_vel.get_channel_avg())
-            #     log_line = format_string(log_line, val_loss)
-            #     if not quiet_mode:
-            #         # print('Validation loss: {} vel_loss: {}/{:.6f}'.format(val_loss, val_vel.get_channel_avg(),
-            #         #                                                        val_vel.get_total_avg()))
-            #         print('Validation loss: {} '.format(val_loss))
-            #     if val_loss < best_val_loss:
-            #         best_val_loss = val_loss
-            #         saved_model = True
-            #         if args.out_dir:
-            #             model_path = osp.join(args.out_dir, 'checkpoints', 'checkpoint_%d.pt' % epoch)
-            #             torch.save({'model_state_dict': network.state_dict(),
-            #                         'epoch': epoch,
-            #                         'loss': train_errs[epoch],
-            #                         'optimizer_state_dict': optimizer.state_dict()}, model_path)
-            #             print('Best Validation Model saved to ', model_path)
-            #     if use_scheduler:
-            #         scheduler.step(val_loss)
-            #
             if args.out_dir and not saved_model and (epoch + 1) % args.save_interval == 0:  # save even with validation
                 model_path = osp.join(args.out_dir, 'checkpoints', 'icheckpoint_%d.pt' % epoch)
                 torch.save({'model_state_dict': network.state_dict(),
@@ -301,14 +252,6 @@ def train(args, **kwargs):
                             'loss': train_errs[epoch],
                             'optimizer_state_dict': optimizer.state_dict()}, model_path)
                 print('Model saved to ', model_path)
-            #
-            # if log_file:
-            #     log_line += '\n'
-            #     with open(log_file, 'a') as f:
-            #         f.write(log_line)
-            # if np.isnan(train_loss):
-            #     print("Invalid value. Stopping training.")
-            #     break
     except KeyboardInterrupt:
         print('-' * 60)
         print('Early terminate')
@@ -327,12 +270,12 @@ def run_test(network, data_loader, device, eval_mode=True):
     preds_all = []
     if eval_mode:
         network.eval()
+    # 使用初始化的网络先跑一次 记录预测结果
     for bid, (feat, targ, _, _) in enumerate(data_loader):
         pred = network(feat.to(device)).cpu().detach().numpy()
         targets_all.append(targ.detach().numpy())
         preds_all.append(pred)
     targets_all = np.concatenate(targets_all, axis=0)
-    print(targets_all.shape)
     preds_all = np.concatenate(preds_all, axis=0)
     return targets_all, preds_all
 

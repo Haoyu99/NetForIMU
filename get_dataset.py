@@ -1,4 +1,6 @@
+import math
 from data_process.dataset import RIDIDataset
+from utils import RandomHoriRotate
 
 
 def get_dataset(args, **kwargs):
@@ -10,11 +12,14 @@ def get_dataset(args, **kwargs):
     """
     mode = kwargs.get('mode', 'train')
     # 随机偏移    打乱顺序    角度旋转   使用游戏方向矢量
-    random_shift, shuffle, transforms, grv_only = 0, False, [], False
+    random_shift, shuffle, transforms, grv_only = 0, False, None, False
     # 加载训练数据
     if mode == 'train':
         shuffle = True
         random_shift = args.step_size // 2
+        #  训练过程中加入随机旋转
+        transforms = RandomHoriRotate(math.pi * 2)
+
         with open(args.train_list) as f:
             data_list = [s.strip().split(',' or ' ')[0] for s in f.readlines() if len(s) > 0 and s[0] != '#']
             print(data_list)

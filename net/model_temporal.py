@@ -1,7 +1,7 @@
 import torch
 from torch.autograd import Variable
 
-from tcn import TemporalConvNet
+from net.tcn import TemporalConvNet
 
 
 class LSTMSeqNetwork(torch.nn.Module):
