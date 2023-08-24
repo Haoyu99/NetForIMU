@@ -11,21 +11,18 @@ def get_dataset(args, **kwargs):
     :return:
     """
     mode = kwargs.get('mode', 'train')
-    # 随机偏移    打乱顺序    角度旋转   使用游戏方向矢量
     random_shift, shuffle, transforms, grv_only = 0, False, None, False
     # 加载训练数据
     if mode == 'train':
         shuffle = True
         random_shift = args.step_size // 2
-        #  训练过程中加入随机旋转
         transforms = RandomHoriRotate(math.pi * 2)
-
         with open(args.train_list) as f:
             data_list = [s.strip().split(',' or ' ')[0] for s in f.readlines() if len(s) > 0 and s[0] != '#']
             print(data_list)
     # 加载验证集数据
     elif mode == 'val':
-        shuffle = False
+        shuffle = True
         with open(args.val_list) as f:
             data_list = [s.strip().split(',' or ' ')[0] for s in f.readlines() if len(s) > 0 and s[0] != '#']
             print(data_list)
@@ -35,7 +32,6 @@ def get_dataset(args, **kwargs):
         with open(args.test_list) as f:
             data_list = [s.strip().split(',' or ' ')[0] for s in f.readlines() if len(s) > 0 and s[0] != '#']
             print(data_list)
-    # CNN 模型用RIDIData 序列模型用另外一个
     dataset = RIDIDataset(args.seq_type, args.data_dir, data_list, args.cache_path, args.step_size,
                                         args.window_size,
                                         random_shift=random_shift, transform=transforms, shuffle=shuffle,

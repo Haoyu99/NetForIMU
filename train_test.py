@@ -33,34 +33,34 @@ class GetArgs(dict):
 
 info = {'type': 'lstm_bi',
         # 数据源
-        'data_dir': '/home/jiamingjie/zhanghaoyu/data',
+        'data_dir': '/home/jiamingjie/zhanghaoyu/mydateset',
         # 训练数据list
-        'train_list': '/home/jiamingjie/zhanghaoyu/data/train_handle.txt',
+        'train_list': '/home/jiamingjie/zhanghaoyu/mydateset/train_list.txt',
         # 验证数据list
-        'val_list': '/home/jiamingjie/zhanghaoyu/data/val_handle.txt',
+        'val_list': '/home/jiamingjie/zhanghaoyu/mydateset/val_list.txt',
         # 测试数据list
-        'test_list': '/home/jiamingjie/zhanghaoyu/data/test_list2.txt',
+        'test_list': '/home/jiamingjie/zhanghaoyu/mydateset/test_list.txt',
         # 数据生成的缓存地址 第一次加载从csv-> hd5 之后加载缓存
-        'cache_path': '/home/jiamingjie/zhanghaoyu/data//cache',
+        'cache_path': '/home/jiamingjie/zhanghaoyu/mydateset/cache',
         # 测试时加载的模型地址
-        'model_path': '/home/jiamingjie/zhanghaoyu/datacache/handle_out/checkpoints/checkpoint_best.pt',
+        'model_path': '/home/jiamingjie/zhanghaoyu/mydateset/output/checkpoints/checkpoint_latest.pt',
         'feature_sigma': 0.001,
         'target_sigma': 0.0,
         # 200个数据算一个切片 6*200 输入
         'window_size': 200,
         # 打乱顺序的范围
         'step_size': 10,
-        'batch_size': 64,
+        'batch_size': 16,
         'num_workers': 1,
         # 输出地址
-        'out_dir': '/home/jiamingjie/zhanghaoyu/datacache/handle_out/',
+        'out_dir': '/home/jiamingjie/zhanghaoyu/mydateset/output',
         'device': 'cuda:1',
         'dataset': 'ridi',
         'layers': 3,
         'layer_size': 200,
         'epochs': 300,
         'save_interval': 20,
-        'lr': 0.01,
+        'lr': 0.0001,
         'mode': 'train',
         'continue_from': None,
         'fast_test': False,
@@ -134,7 +134,7 @@ def train(args, **kwargs):
         print('验证集Dataset切片个数: {}'.format(len(val_dataset)))
         val_mini_batches = len(val_loader)
 
-    network = get_CNN_model("resnet101").to(device)
+    network = get_CNN_model("resnet18").to(device)
     # criterion = get_loss_function()
     # loss 计算方式 使用均方根误差
     criterion = torch.nn.MSELoss()
@@ -333,7 +333,7 @@ def test(args, **kwargs):
         checkpoint = torch.load(args.model_path, map_location=lambda storage, location: storage)
     else:
         checkpoint = torch.load(args.model_path, map_location=args.device)
-    network = get_CNN_model()(args, **kwargs)
+    network = get_CNN_model('resnet18')
     print(network)
     network.load_state_dict(checkpoint.get('model_state_dict'))
     network.eval().to(device)
@@ -390,5 +390,5 @@ def test(args, **kwargs):
 
 
 if __name__ == '__main__':
-    train(args,use_scheduler = True)
-    # test(args)
+    # train(args,use_scheduler = True)
+    test(args)

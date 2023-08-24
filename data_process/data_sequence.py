@@ -2,9 +2,11 @@ from abc import ABC, abstractmethod
 from os import path as osp
 import numpy as np
 import pandas
-from quaternion import quaternion
 
 # 数据sequence从csv中加载 转换为对应的list
+import quaternion
+
+
 class DataSequence(ABC):
     """
     An abstract interface for compiled sequence.

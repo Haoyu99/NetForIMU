@@ -18,7 +18,7 @@ class BasicBlock1D(nn.Module):
         super(BasicBlock1D, self).__init__()
         self.conv1 = conv3(in_planes, out_planes, kernel_size, stride, dilation)
         self.bn1 = nn.BatchNorm1d(out_planes)
-        self.relu = nn.ReLU(inplace=True)
+        self.elu = nn.ELU(inplace=True)
         self.conv2 = conv3(out_planes, out_planes, kernel_size)
         self.bn2 = nn.BatchNorm1d(out_planes)
         self.stride = stride
@@ -29,7 +29,7 @@ class BasicBlock1D(nn.Module):
 
         out = self.conv1(x)
         out = self.bn1(out)
-        out = self.relu(out)
+        out = self.elu(out)
 
         out = self.conv2(out)
         out = self.bn2(out)
@@ -38,7 +38,7 @@ class BasicBlock1D(nn.Module):
             residual = self.downsample(x)
 
         out += residual
-        out = self.relu(out)
+        out = self.elu(out)
 
         return out
 
@@ -111,10 +111,10 @@ class FCOutputModule(nn.Module):
 
         self.fc = nn.Sequential(
             nn.Linear(in_planes * in_dim, fc_dim),
-            nn.ReLU(True),
+            nn.ELU(True),
             nn.Dropout(dropout),
             nn.Linear(fc_dim, fc_dim),
-            nn.ReLU(True),
+            nn.ELU(True),
             nn.Dropout(dropout),
             nn.Linear(fc_dim, num_outputs))
 
